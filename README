@@ -1,0 +1,16 @@
+Building
+========
+
+    1) From the root of the source, run ./configure && make
+    2) That should do it!!
+
+    If you have any problems, please let me know at
+    john+svnfs@jmadden.eu.
+
+Support
+=======
+    
+    getattr()
+    readdir()
+    open()
+    read()

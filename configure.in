@@ -1,0 +1,76 @@
+#                                               -*- Autoconf -*-
+# Process this file with autoconf to produce a configure script.
+
+AC_PREREQ(2.60)
+AC_INIT(SvnFs, 0.4, john+svnfs@jmadden.eu)
+AM_INIT_AUTOMAKE(SvnFs, 0.4)
+AC_CONFIG_SRCDIR([src/svnfs.c])
+AM_CONFIG_HEADER(config.h)
+
+# Checks for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
+AC_CHECK_PROG([APR_CONFIG], [apr-config], [apr-config])
+if test "$APR_CONFIG" != "apr-config"; then
+    AC_CHECK_PROG([APR_CONFIG], [apr-1-config], [apr-1-config])
+    if test "$APR_CONFIG" != "apr-config"; then
+        if test "$APR_CONFIG" != "apr-1-config"; then
+            echo "The 'apr-config' program is required to build this software"
+            exit
+        fi
+    fi
+fi
+
+CPPFLAGS="-D_FILE_OFFSET_BITS=64"
+
+# Get the apr libs, includes and cflags from apr-config
+APR_LIBS=`$APR_CONFIG --libs --link-ld --ldflags`
+AC_SUBST(APR_LIBS)
+APR_CFLAGS=`$APR_CONFIG --cflags --cppflags`
+AC_SUBST(APR_CFLAGS)
+# Includes added to CPPFLAGS for AC_TRY_CPP below that checks for the
+# include files
+APR_CPPFLAGS=`$APR_CONFIG --includes`
+
+# Subversion libraries and includes
+SUBV_LIBS=`./svn-config.pl --link-ld`
+AC_SUBST(SUBV_LIBS)
+# Includes added to CPPFLAGS for AC_TRY_CPP below that checks for the
+# include files
+SUBV_CPPFLAGS=`./svn-config.pl --includes`
+
+# Checks for libraries.
+AC_CHECK_LIB([fuse], [fuse_main])
+#AC_CHECK_LIB([svn_client-1], [svn_client_version])
+#AC_CHECK_LIB([svn_wc-1], [svn_wc_version])
+#AC_CHECK_LIB([svn_repos-1], [svn_repos_version])
+
+# Checks for header files.
+AC_HEADER_DIRENT
+AC_HEADER_STDC
+AC_CHECK_HEADERS([fcntl.h stddef.h stdlib.h string.h strings.h sys/time.h unistd.h errno.h dirent.h stdarg.h])
+AC_CHECK_HEADER([fuse.h], [AC_DEFINE([HAVE_FUSE_H], [1], [Have fuse.h header])], [AC_MSG_ERROR([No fuse.h found.])]) 
+CPPFLAGS="$CPPFLAGS $APR_CPPFLAGS" 
+export CPPFLAGS
+AC_TRY_CPP([#include <apr.h> #include <apr_pools.h>], [AC_DEFINE([HAVE_APR_HEADERS], [1], [Have APR header files])], [AC_MSG_ERROR([No APR headers found.])])
+CPPFLAGS="$CPPFLAGS $SUBV_CPPFLAGS"
+export CPPFLAGS
+AC_TRY_CPP([#include <svn_client.h> #include <svn_pools.h> #include <svn_cmdline.h> #include <svn_config.h> #include <svn_types.h> #include <svn_io.h> #include <svn_error.h>], [AC_DEFINE([HAVE_SVN_HEADERS], [1], [Have Subversion header files])], [AC_MSG_ERROR([No Subversion headers found.])])
+
+# Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_UID_T
+AC_TYPE_MODE_T
+AC_TYPE_OFF_T
+AC_TYPE_SIZE_T
+AC_HEADER_TIME
+
+# Checks for library functions.
+AC_FUNC_CHOWN
+AC_FUNC_MALLOC
+AC_FUNC_UTIME_NULL
+AC_CHECK_FUNCS([gettimeofday memset mkdir mkfifo rmdir strdup strstr utime])
+
+AC_CONFIG_FILES([Makefile
+                 src/Makefile])
+AC_OUTPUT

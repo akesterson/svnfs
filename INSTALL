@@ -1,0 +1,6 @@
+Basic Installation
+==================
+
+There's no install target at the moment, so run the binary from the src/
+subdirectory. If you want to install it, copy src/svnfs to wherever you
+want it.

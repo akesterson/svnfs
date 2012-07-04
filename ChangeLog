@@ -1,0 +1,15 @@
+Version 0.1 : readdir() and getattr() support
+Version 0.2 : autoconf, automake support
+Version 0.3 : open() and read() support
+Version 0.3.1 : fixed a RHEL configure bug
+Version 0.4 : 
+    Updated and standardised error reporting.
+    Standardised the debug logging messages.
+    Removed the requirement to recursively list the repository at mount
+    time. This trades slower command execution for quicker mounting and
+    always up-to-date repository contents.
+    Fix listing of files and directories in the root of the mounted
+    filesystem.
+    Fix a segfault caused by an off-by-one in the allocation of space
+    for the fullpath buffer in _svnclient_list_func().
+    In svnfs_readdir(), don't return subdirectory files.
