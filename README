@@ -1,16 +1,27 @@
+Information
+===========
+
+    svnfs was originally written by John Madden, and later picked up and maintained by various others.
+
 Building
 ========
 
     1) From the root of the source, run ./configure && make
-    2) That should do it!!
+    2) svnadmin create some_repo
+    3) svn co some_repo checkout
+    4) mkdir mount
+    5) ./src/svnfs checkout mount
+    6) enjoy
 
     If you have any problems, please let me know at
-    john+svnfs@jmadden.eu.
+    andrew@aklabs.net. 
 
 Support
 =======
     
     getattr()
+       - currently returns user, group, mtime, mode, and size. user, group, and mode are based 
+         off the "svnfs:owner_user", "svnfs:owner_group", and "svnfs:mode" svn attributes.
     readdir()
     open()
     read()
