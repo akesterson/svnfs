@@ -10,6 +10,8 @@
 
 /* vim "+set tabstop=4 shiftwidth=4 expandtab" */
 
+#include <syslog.h>
+
 #ifdef linux
 #define _XOPEN_SOURCE 500
 #endif
@@ -31,9 +33,7 @@ void DEBUG(char *fmt, ...) {
         va_list ap;
 
         va_start(ap, fmt);
-        printf("DEBUG : ");
-        vprintf(fmt, ap);
-        printf("\n");
+        vsyslog(LOG_INFO, fmt, ap);
     }
 }
 /* svnfs specific options */
@@ -62,9 +62,8 @@ static int svnfs_getattr(const char *path, struct stat *buf) {
     } else {
         while( dp && dp->name ) {
             if( !(strncmp(path, dp->name, strlen(path))) ) {
-                buf->st_mode = dp->st.st_mode;
-                buf->st_size = dp->st.st_size;
-                return(0);
+	      goto svnfs_getattr_exit;
+	      return(0);
             }
             dp = dp->next;
         }
@@ -75,8 +74,12 @@ static int svnfs_getattr(const char *path, struct stat *buf) {
         return(-err);
     }
 
+svnfs_getattr_exit:
     buf->st_mode = dp->st.st_mode;
     buf->st_size = dp->st.st_size;
+    buf->st_mtime = dp->st.st_mtime;
+    buf->st_uid = dp->st.st_uid;
+    buf->st_gid = dp->st.st_gid;
     return(0);
 }
 
@@ -227,7 +230,8 @@ int main(int argc, char *argv[]) {
 
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-    svnfs.debug = 0;
+    svnfs.debug = 1;
+    openlog("svnfs", LOG_CONS, LOG_DAEMON);
 
     if( fuse_opt_parse(&args, &svnfs, svnfs_opts, svnfs_parse_opts) == -1 ) {
         fprintf(stderr, "Error parsing command line arguments\n");
@@ -260,5 +264,7 @@ int main(int argc, char *argv[]) {
     first->name = NULL;
     first->next = NULL;
 
-    return(fuse_main(args.argc, args.argv, &svnfs_oper));
+    int err = fuse_main(args.argc, args.argv, &svnfs_oper);
+    closelog();
+    return err;
 }

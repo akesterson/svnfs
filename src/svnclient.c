@@ -12,6 +12,200 @@
 
 #include "svnfs.h"
 #include "svnclient.h"
+#include <apr_tables.h>
+#include <apr_hash.h>
+#include <stdlib.h>
+#include <syslog.h>
+
+int popen_output(char *cmd, char *buf, int readsize, int nreads)
+{
+  FILE *fp = popen(cmd, "r");
+  int reads = 0;
+  if ( fp == NULL )
+    return 0;
+  reads = fread(buf, readsize, nreads, fp);
+  pclose(fp);
+  return reads * readsize;
+}
+
+/*
+ * Places the uid for the given username in 'uid'.
+ * If the username is not found, returns 1, meaning 'uid'
+ * contains an invalid value (NULL).
+ */ 
+int uid_for_username(char *username, int *uid)
+{
+  int retcode = 1;
+  if ( uid == NULL )
+    return 1;
+  char *cmdbuf = malloc(1024);
+  if ( cmdbuf == NULL ) {
+    goto uid_for_username_out_of_memory;
+  }
+  char *buf = malloc(256);
+  if ( buf == NULL ) {
+    free(cmdbuf);
+    goto uid_for_username_out_of_memory;
+  }
+
+  sprintf(cmdbuf, "getent passwd %s", username);
+
+  if ( popen_output(cmdbuf, buf, 1, 512) == 0 ) {
+    goto uid_for_username_clean_exit;
+  }
+  
+
+  char *tok = strtok(buf, ":");
+  tok = strtok(NULL, ":");
+  tok = strtok(NULL, ":");
+
+  *uid = strtol(tok, NULL, 10);
+  retcode = 0;
+
+  uid_for_username_clean_exit:
+      free(buf);
+      free(cmdbuf);
+      return retcode;
+  uid_for_username_out_of_memory:
+      DEBUG("Out of memory in uid_for_username!");
+      *uid = 0;
+      return retcode;
+}
+
+/*
+ * Places the gid for the given groupname in 'uid'.
+ * If the groupname is not found, returns 1, meaning 'uid'
+ * contains an invalid value (NULL).
+ */ 
+int gid_for_groupname(char *groupname, int *gid)
+{
+  int retcode = 1;
+  if ( gid == NULL )
+    return 1;
+  char *cmdbuf = malloc(1024);
+  if ( cmdbuf == NULL ) {
+    goto gid_for_groupname_out_of_memory;
+  }
+  char *buf = malloc(256);
+  if ( buf == NULL ) {
+    free(cmdbuf);
+    goto gid_for_groupname_out_of_memory;
+  }
+
+  sprintf(cmdbuf, "getent group %s", groupname);
+
+  if ( popen_output(cmdbuf, buf, 1, 512) == 0 ) {
+    goto gid_for_groupname_clean_exit;
+  }
+  
+  char *tok = strtok(buf, ":");
+  tok = strtok(NULL, ":");
+  tok = strtok(NULL, ":");
+
+  *gid = strtol(tok, NULL, 10);
+  retcode = 0;
+
+  gid_for_groupname_clean_exit:
+      free(buf);
+      free(cmdbuf);
+      return retcode;
+  gid_for_groupname_out_of_memory:
+      DEBUG("Out of memory in gid_for_groupname!");
+      *gid = 0;
+      return retcode;
+}
+
+int mode_for_path(char *path)
+{
+    svn_opt_revision_t *rev;
+    apr_hash_index_t *hi = NULL;
+    void *val = NULL;
+    void *key = NULL;
+    apr_hash_t *hashmap = NULL;
+    rev = malloc(sizeof(rev));
+
+    if ( rev != NULL ) {
+      rev->kind = svn_opt_revision_head;
+      // Get the ownership information from the svnfs: properties.
+      svn_client_propget(&hashmap,
+			 "svnfs:mode",
+			 path,
+			 rev,
+			 FALSE,
+			 ctx,
+			 pool);
+      if ( apr_hash_count(hashmap) < 1 )
+	return 0775;
+
+      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
+      free(rev);
+      return strtol(((svn_string_t *)val)->data, NULL, 8);
+    }
+}
+
+int uid_for_path(char *path)
+{
+    svn_opt_revision_t *rev;
+    apr_hash_index_t *hi = NULL;
+    void *val = NULL;
+    void *key = NULL;
+    apr_hash_t *hashmap = NULL;
+    rev = malloc(sizeof(rev));
+    int uid = 0;
+
+    if ( rev != NULL ) {
+      rev->kind = svn_opt_revision_head;
+      // Get the ownership information from the svnfs: properties.
+      svn_client_propget(&hashmap,
+			 "svnfs:owner_user",
+			 path,
+			 rev,
+			 FALSE,
+			 ctx,
+			 pool);
+      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
+      if ( uid_for_username(((svn_string_t *)apr_hash_get(hashmap,
+							  (const void *)key,
+							  APR_HASH_KEY_STRING))->data,
+			    &uid) > 0 ) {
+	uid = 0;
+      }
+      free(rev);
+    }
+
+    return uid;
+}
+
+int gid_for_path(char *path)
+{
+    svn_opt_revision_t *rev;
+    apr_hash_index_t *hi = NULL;
+    void *val = NULL;
+    void *key = NULL;
+    apr_hash_t *hashmap = NULL;
+    int gid = 0;
+    rev = malloc(sizeof(rev));
+
+    if ( rev != NULL ) {
+      rev->kind = svn_opt_revision_head;
+      svn_client_propget(&hashmap,
+			 "svnfs:owner_group",
+			 path,
+			 rev, // peg_revision,
+			 FALSE, // recurse,
+			 ctx,
+			 pool);
+      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
+      if ( gid_for_groupname(((svn_string_t *)apr_hash_get(hashmap,
+							   (const void *)key,
+							   APR_HASH_KEY_STRING))->data,
+			     &gid) > 0 ) {
+	gid = 0;
+      }
+      free(rev);
+    }
+    return gid;
+}
 
 int svnclient_setup_ctx() {
     svn_auth_baton_t *auth_baton;
@@ -53,9 +247,12 @@ int svnclient_setup_ctx() {
 static svn_error_t *_svnclient_list_func(void *baton, const char *path,
         const svn_dirent_t *dirent, const svn_lock_t *lock,
         const char *abs_path, apr_pool_t *pool) {
+    svn_error_t *retval = SVN_NO_ERROR;
     struct dirbuf *dp;
+    char *abspath;
     char *fullpath;
     int slash_idx;
+    char found = 0;
     struct svnfs_attr *attr = (struct svnfs_attr *)baton;
 
     /* The first 'path' argument is blank, meaning it's the details for
@@ -78,50 +275,75 @@ static svn_error_t *_svnclient_list_func(void *baton, const char *path,
         sprintf(fullpath, "%s%s", attr->path, path);
     }
 
-    DEBUG("_svnclient_list_func(): path %s", fullpath);
+    if( (abspath = malloc(strlen(svnfs.svnpath) + strlen(fullpath) + 1)) == NULL )
+        return(EIO);
+    sprintf(abspath, "%s%s", svnfs.svnpath, fullpath);
+    while( abspath[strlen(abspath)-1] == '/' )
+        abspath[strlen(abspath)-1] = '\0';
+
+    DEBUG("_svnclient_list_func(): abspath %s from %s", abspath, fullpath);
 
     slash_idx = (strlen(fullpath) - strlen(rindex(fullpath, '/')));
 
-    /* If this file is already in the dirbuf cache, update st_size */
+    /* If this file is already in the dirbuf cache, update stats */
     dp = first;
+    // FIXME: Refactor this loop out into a generic function that returns
+    // dp when it's already in the cache, NULL otherwise before this becomes 
+    // a bad pattern.
     while( dp && dp->name ) {
         if( dp->name[slash_idx] != '/' ) {
             dp = dp->next;
             continue;
         }
         if( !(strncmp(dp->name, fullpath, strlen(fullpath))) ) {
-            free(fullpath);
             dp->st.st_size = dirent->size;
+	    dp->st.st_mtime = apr_to_time_t(dirent->time);
             attr->dp = dp;
-            return(SVN_NO_ERROR);
+	    found = 1;
+	    break;
         }
         dp = dp->next;
     }
+    if ( found == 0 ) {
+      dp->name = strdup(fullpath);
 
-    dp->name = strdup(fullpath);
+      dp->st.st_size = dirent->size;
+      dp->st.st_mtime = apr_to_time_t(dirent->time);
+      DEBUG("_svnclient_list_func(): st_mtime = %d dirent->time = %ld", dp->st.st_mtime, dirent->time);
+
+      DEBUG("_svnclient_list_func(): added %s", dp->name);
+
+      /* Point attr->dp at the newly created element */
+      attr->dp = dp;
+
+      /* Deliberately allocating a new struct here. This is required for
+       * subsequent lists so that dp is allocated after finishing the
+       * while() loop above */
+      if( (dp->next = malloc(sizeof(struct dirbuf))) == NULL ) {
+	retval = svn_error_create(SVN_ERR_FS_GENERAL, NULL, strerror(errno));
+	goto _svnclient_list_func_early_exit;
+      }
+    }
+
+    dp->st.st_uid = uid_for_path(abspath);
+    dp->st.st_gid = gid_for_path(abspath);
     if( dirent->kind == svn_node_file )
-        dp->st.st_mode = S_IFREG | 0644;
+      dp->st.st_mode = S_IFREG | mode_for_path(abspath);
     else
-        dp->st.st_mode = S_IFDIR | 0755;
+      dp->st.st_mode = S_IFDIR | mode_for_path(abspath);
 
-    dp->st.st_size = dirent->size;
-
-    DEBUG("_svnclient_list_func(): added %s", dp->name);
-
-    /* Point attr->dp at the newly created element */
-    attr->dp = dp;
-
-    /* Deliberately allocating a new struct here. This is required for
-     * subsequent lists so that dp is allocated after finishing the
-     * while() loop above */
-    if( (dp->next = malloc(sizeof(struct dirbuf))) == NULL )
-        return(svn_error_create(SVN_ERR_FS_GENERAL, NULL, strerror(errno)));
-    dp = dp->next;
-    dp->next = NULL;
-    dp->name = NULL;
-
-    free(fullpath);
-    return(SVN_NO_ERROR);
+_svnclient_list_func_early_exit:
+    if (dp->next) {
+      dp = dp->next;
+      dp->next = NULL;
+      dp->name = NULL;
+    }
+    
+    if (abspath)
+      free(abspath);
+    if ( fullpath )
+      free(fullpath);
+    return retval;
 }
 
 /* If a file isn't contained in the dirbuf cache, this will get called. 

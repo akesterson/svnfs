@@ -22,6 +22,7 @@
 #include <svn_config.h>
 #include <svn_io.h>
 #include <svn_error.h>
+#include <apr_time.h>
 
 #include "svnfs.h"
 
@@ -32,6 +33,8 @@ struct svnfs_attr {
 
 svn_client_ctx_t *ctx;
 apr_pool_t *pool;
+
+#define apr_to_time_t(x) ((time_t) (x / APR_USEC_PER_SEC))
 
 int svnclient_setup_ctx(void);
 
