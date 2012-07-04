@@ -17,7 +17,7 @@
 #include <stdlib.h>
 #include <syslog.h>
 
-int popen_output(char *cmd, char *buf, int readsize, int nreads)
+int svnclient_popen_output(char *cmd, char *buf, int readsize, int nreads)
 {
   FILE *fp = popen(cmd, "r");
   int reads = 0;
@@ -33,25 +33,25 @@ int popen_output(char *cmd, char *buf, int readsize, int nreads)
  * If the username is not found, returns 1, meaning 'uid'
  * contains an invalid value (NULL).
  */ 
-int uid_for_username(char *username, int *uid)
+int svnclient_uid_for_username(char *username, int *uid)
 {
   int retcode = 1;
   if ( uid == NULL )
     return 1;
   char *cmdbuf = malloc(1024);
   if ( cmdbuf == NULL ) {
-    goto uid_for_username_out_of_memory;
+    goto svnclient_uid_for_username_out_of_memory;
   }
   char *buf = malloc(256);
   if ( buf == NULL ) {
     free(cmdbuf);
-    goto uid_for_username_out_of_memory;
+    goto svnclient_uid_for_username_out_of_memory;
   }
 
   sprintf(cmdbuf, "getent passwd %s", username);
 
-  if ( popen_output(cmdbuf, buf, 1, 512) == 0 ) {
-    goto uid_for_username_clean_exit;
+  if ( svnclient_popen_output(cmdbuf, buf, 1, 512) == 0 ) {
+    goto svnclient_uid_for_username_clean_exit;
   }
   
 
@@ -62,12 +62,12 @@ int uid_for_username(char *username, int *uid)
   *uid = strtol(tok, NULL, 10);
   retcode = 0;
 
-  uid_for_username_clean_exit:
+  svnclient_uid_for_username_clean_exit:
       free(buf);
       free(cmdbuf);
       return retcode;
-  uid_for_username_out_of_memory:
-      DEBUG("Out of memory in uid_for_username!");
+  svnclient_uid_for_username_out_of_memory:
+      DEBUG("Out of memory in svnclient_uid_for_username!");
       *uid = 0;
       return retcode;
 }
@@ -77,25 +77,25 @@ int uid_for_username(char *username, int *uid)
  * If the groupname is not found, returns 1, meaning 'uid'
  * contains an invalid value (NULL).
  */ 
-int gid_for_groupname(char *groupname, int *gid)
+int svnclient_gid_for_groupname(char *groupname, int *gid)
 {
   int retcode = 1;
   if ( gid == NULL )
     return 1;
   char *cmdbuf = malloc(1024);
   if ( cmdbuf == NULL ) {
-    goto gid_for_groupname_out_of_memory;
+    goto svnclient_gid_for_groupname_out_of_memory;
   }
   char *buf = malloc(256);
   if ( buf == NULL ) {
     free(cmdbuf);
-    goto gid_for_groupname_out_of_memory;
+    goto svnclient_gid_for_groupname_out_of_memory;
   }
 
   sprintf(cmdbuf, "getent group %s", groupname);
 
-  if ( popen_output(cmdbuf, buf, 1, 512) == 0 ) {
-    goto gid_for_groupname_clean_exit;
+  if ( svnclient_popen_output(cmdbuf, buf, 1, 512) == 0 ) {
+    goto svnclient_gid_for_groupname_clean_exit;
   }
   
   char *tok = strtok(buf, ":");
@@ -105,17 +105,17 @@ int gid_for_groupname(char *groupname, int *gid)
   *gid = strtol(tok, NULL, 10);
   retcode = 0;
 
-  gid_for_groupname_clean_exit:
+  svnclient_gid_for_groupname_clean_exit:
       free(buf);
       free(cmdbuf);
       return retcode;
-  gid_for_groupname_out_of_memory:
-      DEBUG("Out of memory in gid_for_groupname!");
+  svnclient_gid_for_groupname_out_of_memory:
+      DEBUG("Out of memory in svnclient_gid_for_groupname!");
       *gid = 0;
       return retcode;
 }
 
-int mode_for_path(char *path)
+int svnclient_mode_for_path(char *path)
 {
     svn_opt_revision_t *rev;
     apr_hash_index_t *hi = NULL;
@@ -143,7 +143,7 @@ int mode_for_path(char *path)
     }
 }
 
-int uid_for_path(char *path)
+int svnclient_uid_for_path(char *path)
 {
     svn_opt_revision_t *rev;
     apr_hash_index_t *hi = NULL;
@@ -164,9 +164,9 @@ int uid_for_path(char *path)
 			 ctx,
 			 pool);
       apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
-      if ( uid_for_username(((svn_string_t *)apr_hash_get(hashmap,
-							  (const void *)key,
-							  APR_HASH_KEY_STRING))->data,
+      if ( svnclient_uid_for_username(((svn_string_t *)apr_hash_get(hashmap,
+								    (const void *)key,
+								    APR_HASH_KEY_STRING))->data,
 			    &uid) > 0 ) {
 	uid = 0;
       }
@@ -176,7 +176,7 @@ int uid_for_path(char *path)
     return uid;
 }
 
-int gid_for_path(char *path)
+int svnclient_gid_for_path(char *path)
 {
     svn_opt_revision_t *rev;
     apr_hash_index_t *hi = NULL;
@@ -196,9 +196,9 @@ int gid_for_path(char *path)
 			 ctx,
 			 pool);
       apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
-      if ( gid_for_groupname(((svn_string_t *)apr_hash_get(hashmap,
-							   (const void *)key,
-							   APR_HASH_KEY_STRING))->data,
+      if ( svnclient_gid_for_groupname(((svn_string_t *)apr_hash_get(hashmap,
+								     (const void *)key,
+								     APR_HASH_KEY_STRING))->data,
 			     &gid) > 0 ) {
 	gid = 0;
       }
@@ -325,12 +325,12 @@ static svn_error_t *_svnclient_list_func(void *baton, const char *path,
       }
     }
 
-    dp->st.st_uid = uid_for_path(abspath);
-    dp->st.st_gid = gid_for_path(abspath);
+    dp->st.st_uid = svnclient_uid_for_path(abspath);
+    dp->st.st_gid = svnclient_gid_for_path(abspath);
     if( dirent->kind == svn_node_file )
-      dp->st.st_mode = S_IFREG | mode_for_path(abspath);
+      dp->st.st_mode = S_IFREG | svnclient_mode_for_path(abspath);
     else
-      dp->st.st_mode = S_IFDIR | mode_for_path(abspath);
+      dp->st.st_mode = S_IFDIR | svnclient_mode_for_path(abspath);
 
 _svnclient_list_func_early_exit:
     if (dp->next) {
