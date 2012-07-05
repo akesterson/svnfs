@@ -17,6 +17,11 @@
 #include <stdlib.h>
 #include <syslog.h>
 
+/*
+ * Returns the string value assigned to a property at a given path target (or NULL).
+ * The return value of this function is volatile, you should copy it if you intend
+ * to keep it around for any length of time.
+ */
 void *svnclient_property_for_path(char *path, char *propname)
 {
     svn_opt_revision_t *rev;
@@ -48,7 +53,9 @@ void *svnclient_property_for_path(char *path, char *propname)
     }
 }
 
-
+/*
+ * Exec a shell command (via /bin/sh) and return its stdout
+ */
 int svnclient_popen_output(char *cmd, char *buf, int readsize, int nreads)
 {
   FILE *fp = popen(cmd, "r");
@@ -105,8 +112,8 @@ int svnclient_uid_for_username(char *username, int *uid)
 }
 
 /*
- * Places the gid for the given groupname in 'uid'.
- * If the groupname is not found, returns 1, meaning 'uid'
+ * Places the gid for the given groupname in 'gid'.
+ * If the groupname is not found, returns 1, meaning 'gid'
  * contains an invalid value (NULL).
  */ 
 int svnclient_gid_for_groupname(char *groupname, int *gid)
@@ -147,6 +154,9 @@ int svnclient_gid_for_groupname(char *groupname, int *gid)
       return retcode;
 }
 
+/*
+ * Returns the file mode for the given path
+ */
 int svnclient_mode_for_path(char *path)
 {
   char *mode = NULL;
@@ -155,6 +165,9 @@ int svnclient_mode_for_path(char *path)
   return 0775;
 }
 
+/*
+ * Returns the uid of the owner for the given path according to svnfs:owner_user
+ */
 int svnclient_uid_for_path(char *path)
 {
   char *username = NULL;
@@ -166,6 +179,9 @@ int svnclient_uid_for_path(char *path)
   return 0;
 }
 
+/*
+ * Returns the gid of the owner for the given path according to svnfs:owner_group
+ */
 int svnclient_gid_for_path(char *path)
 {
   char *groupname = NULL;
