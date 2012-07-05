@@ -17,6 +17,38 @@
 #include <stdlib.h>
 #include <syslog.h>
 
+void *svnclient_property_for_path(char *path, char *propname)
+{
+    svn_opt_revision_t *rev;
+    apr_hash_index_t *hi = NULL;
+    apr_hash_t *hashmap = NULL;
+    void *key;
+    void *data;
+    rev = malloc(sizeof(rev));
+
+    if ( rev != NULL ) {
+      rev->kind = svn_opt_revision_head;
+      // Get the ownership information from the svnfs: properties.
+      svn_client_propget(&hashmap,
+			 propname,
+			 path,
+			 rev,
+			 FALSE,
+			 ctx,
+			 pool);
+      if ( apr_hash_count(hashmap) < 1 )
+	return NULL;
+
+      hi = apr_hash_first(pool, hashmap);
+      if ( hi == NULL )
+	return NULL;
+      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &data);
+      free(rev);
+      return ((svn_string_t *)data)->data;
+    }
+}
+
+
 int svnclient_popen_output(char *cmd, char *buf, int readsize, int nreads)
 {
   FILE *fp = popen(cmd, "r");
@@ -117,94 +149,32 @@ int svnclient_gid_for_groupname(char *groupname, int *gid)
 
 int svnclient_mode_for_path(char *path)
 {
-    svn_opt_revision_t *rev;
-    apr_hash_index_t *hi = NULL;
-    void *val = NULL;
-    void *key = NULL;
-    apr_hash_t *hashmap = NULL;
-    rev = malloc(sizeof(rev));
-
-    if ( rev != NULL ) {
-      rev->kind = svn_opt_revision_head;
-      // Get the ownership information from the svnfs: properties.
-      svn_client_propget(&hashmap,
-			 "svnfs:mode",
-			 path,
-			 rev,
-			 FALSE,
-			 ctx,
-			 pool);
-      if ( apr_hash_count(hashmap) < 1 )
-	return 0775;
-
-      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
-      free(rev);
-      return strtol(((svn_string_t *)val)->data, NULL, 8);
-    }
+  char *mode = NULL;
+  if ( (mode = svnclient_property_for_path(path, "svnfs:mode")) != NULL)
+    return strtol(mode, NULL, 8);
+  return 0775;
 }
 
 int svnclient_uid_for_path(char *path)
 {
-    svn_opt_revision_t *rev;
-    apr_hash_index_t *hi = NULL;
-    void *val = NULL;
-    void *key = NULL;
-    apr_hash_t *hashmap = NULL;
-    rev = malloc(sizeof(rev));
-    int uid = 0;
-
-    if ( rev != NULL ) {
-      rev->kind = svn_opt_revision_head;
-      // Get the ownership information from the svnfs: properties.
-      svn_client_propget(&hashmap,
-			 "svnfs:owner_user",
-			 path,
-			 rev,
-			 FALSE,
-			 ctx,
-			 pool);
-      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
-      if ( svnclient_uid_for_username(((svn_string_t *)apr_hash_get(hashmap,
-								    (const void *)key,
-								    APR_HASH_KEY_STRING))->data,
-			    &uid) > 0 ) {
-	uid = 0;
-      }
-      free(rev);
-    }
-
+  char *username = NULL;
+  int uid = 0;
+  if ( (username = svnclient_property_for_path(path, "svnfs:owner_user")) != NULL ) {
+    svnclient_uid_for_username(username, &uid);
     return uid;
+  }
+  return 0;
 }
 
 int svnclient_gid_for_path(char *path)
 {
-    svn_opt_revision_t *rev;
-    apr_hash_index_t *hi = NULL;
-    void *val = NULL;
-    void *key = NULL;
-    apr_hash_t *hashmap = NULL;
-    int gid = 0;
-    rev = malloc(sizeof(rev));
-
-    if ( rev != NULL ) {
-      rev->kind = svn_opt_revision_head;
-      svn_client_propget(&hashmap,
-			 "svnfs:owner_group",
-			 path,
-			 rev, // peg_revision,
-			 FALSE, // recurse,
-			 ctx,
-			 pool);
-      apr_hash_this(apr_hash_first(pool, hashmap), &key, NULL, &val);
-      if ( svnclient_gid_for_groupname(((svn_string_t *)apr_hash_get(hashmap,
-								     (const void *)key,
-								     APR_HASH_KEY_STRING))->data,
-			     &gid) > 0 ) {
-	gid = 0;
-      }
-      free(rev);
-    }
+  char *groupname = NULL;
+  int gid = 0;
+  if ( (groupname = svnclient_property_for_path(path, "svnfs:owner_group")) != NULL) {
+    svnclient_gid_for_groupname(groupname, &gid);
     return gid;
+  }
+  return 0;
 }
 
 int svnclient_setup_ctx() {
